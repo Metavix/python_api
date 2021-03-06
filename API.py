@@ -14,7 +14,13 @@ class API:
         :param user_id: <int> the user id
         :return: <str> state of the loan
         """
-        if amount == 
+        if amount > 50000:
+            return 'Declined'
+        if amount == 50000:
+            return 'Undecided'
+        else:
+            # TODO: Insert the new loan
+            return 'Approved'
 
     def return_user_id(self):
         """
