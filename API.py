@@ -1,12 +1,19 @@
 import json
 import requests
-from urllib.parse import urlparse
+import dbm
+import pymongo
 from flask import Flask, jsonify, request
 
 
 class API:
     def __init__(self):
+        """
+        Constructor of the class
+        """
         self.user_id = {}
+        self._client_database = pymongo.MongoClient("mongodb://localhost:27017")
+        self._user_table = self._client_database["user_table"]
+        self._loan_table = self._client_database["loan_table"]
 
     def ask_loan(self, amount, user_id):
         """
