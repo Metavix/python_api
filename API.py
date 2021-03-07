@@ -10,10 +10,33 @@ class API:
         """
         Constructor of the class
         """
-        self.user_id = {}
         self._client_database = pymongo.MongoClient("mongodb://localhost:27017")
-        self._user_table = self._client_database["user_table"]
-        self._loan_table = self._client_database["loan_table"]
+        self._my_db = self._client_database["loanDB"]
+        self._user_table = self._my_db["user_table"]
+        self._loan_table = self._my_db["loan_table"]
+
+    def new_user(self, username, password, email, business_name, business_id):
+        """
+        :param username: <str> the user name to log in
+        :param password: <str> the password to log in
+        :param email: <str> the email of the user
+        :param business_name: <str> the name of the business
+        :param business_id: <str> the id of the company in the country
+        :return: <bool> True or False
+        """
+        my_query = {'username': username}
+        item_count = self._user_table.count_documents(my_query)
+        if item_count == 0:
+            data_to_insert = {
+                "username": username,
+                "password": password,
+                "email": email,
+                "business_name": business_name,
+                "business_id": business_id
+            }
+            _id = self._user_table.insert_one(data_to_insert)
+            return _id
+        return 0
 
     def ask_loan(self, amount, user_id):
         """
@@ -21,33 +44,56 @@ class API:
         :param user_id: <int> the user id
         :return: <str> state of the loan
         """
-        if amount > 50000:
-            return 'Declined'
+        print(amount)
         if amount == 50000:
-            return 'Undecided'
+            info_to_insert = {
+                "user_id": user_id,
+                "amount": amount,
+                "application_status": "Undecided",
+                "loan_status": "closed"
+            }
         else:
-            # TODO: Insert the new loan
-            return 'Approved'
+            info_to_insert = {
+                "user_id": user_id,
+                "amount": amount,
+                "application_status": "Approved",
+                "loan_status": "Active"
+            }
+        if amount > 50000:
+            info_to_insert = {
+                "user_id": user_id,
+                "amount": amount,
+                "application_status": "Declined",
+                "loan_status": "closed"
+            }
 
-    def return_user_id(self):
+        print(info_to_insert)
+        x = self._loan_table.insert_one(info_to_insert)
+        info_to_insert.pop('_id')
+        return info_to_insert
+
+    def return_user_id(self, username, password):
         """
         :return: The directory of the user
         """
-        return self.user_id['id']
+        my_query = {'username': username, 'password': password}
+        ans = self._user_table.find_one(my_query)
+        print(ans["business_id"])
+        return ans["business_id"]
 
-    @staticmethod
-    def check_user(username, password):
+    def check_user(self, username, password):
         """
         :param username: <str> The username to ask to database
         :param password: <str> The password of the user
         :return: <bool> true or false
         """
-        # TODO: ask to database for existing user
-        response = True
-        if response:
-            return True
-        else:
+        my_query = {'username': username, 'password': password}
+        item_count = self._user_table.count_documents(my_query)
+        print(item_count)
+        if item_count == 0:
             return False
+        else:
+            return True
 
 
 # Instantiate methods
@@ -57,10 +103,37 @@ app = Flask(__name__)
 api = API()
 
 
-@app.route('/sigIn', methods=['GET'])
+@app.route('/newUser', methods=['POST'])
+def new_user():
+    bdy_parameters = request.get_json()
+    # Check that the body is complete
+    required = ['username', 'password', 'email', 'business_name', 'business_id']
+    if not all(k in bdy_parameters for k in required):
+        return 'Missing parameter', 400
+    res = api.new_user(bdy_parameters['username'], bdy_parameters['password'], bdy_parameters['email'],
+                       bdy_parameters['business_name'], bdy_parameters['business_id'])
+    if res == 0:
+        return 'User already exist', 400
+    else:
+        return 'User has been created the id is: ', 200
+
+
+@app.route('/askLoan', methods=['POST'])
+def ask_loan():
+    bdy_parameters = request.get_json()
+    # Check that the body is complete
+    print(bdy_parameters)
+    required = ['id', 'amount']
+    if not all(k in bdy_parameters for k in required):
+        return 'Missing parameter', 400
+    ans = api.ask_loan(bdy_parameters['amount'], bdy_parameters['id'])
+    return ans, 200
+
+
+@app.route('/sigIn', methods=['POST'])
 def sign_in():
     bdy_parameters = request.get_json()
-
+    print(bdy_parameters)
     # Check that the body is complete
     required = ['username', 'password']
     if not all(k in bdy_parameters for k in required):
@@ -71,19 +144,12 @@ def sign_in():
     if ans:
         response = {
             'username': bdy_parameters['username'],
-            'user_id': api.return_user_id()
+            'user_id': api.return_user_id(bdy_parameters['username'], bdy_parameters['password'])
         }
         return jsonify(response), 200
     else:
         return 'User does not exist', 200
 
 
-if __name__ == '__main__':
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser()
-    parser.add_argument('-p', '--port', default=5000, type=int, help='port to listen on')
-    args = parser.parse_args()
-    port = args.port
-
-    app.run(host='0.0.0.0', port=port)
+# Uncomment this line if you want to specify the port number in the code
+app.run(debug=True, host='0.0.0.0', port=5000)
